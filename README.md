@@ -49,8 +49,38 @@ paths such as `docs/private/`, `docs/prd/`, `docs/dev/`, or `openspec/`.
 This repository uses npm workspaces and Node's built-in test runner.
 
 ```bash
-npm test
+npm install
+npm run check
 ```
+
+`npm run check` builds the workspace packages and runs their tests.
+
+## Publishing
+
+GitHub is the source repository and audit trail. npm is the distribution channel
+for versioned JavaScript/TypeScript packages.
+
+The first package intended for npm publication is:
+
+```text
+@firstrung/schema
+```
+
+To inspect the publish contents:
+
+```bash
+npm pack --workspace @firstrung/schema --dry-run
+```
+
+To publish an alpha release after authenticating with npm and confirming access
+to the `firstrung` npm organisation:
+
+```bash
+npm run release:schema
+```
+
+GitHub releases can be added for repo-level milestones, but downstream JS/TS
+consumers should use npm packages rather than GitHub dependencies.
 
 ## License
 

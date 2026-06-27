@@ -6,10 +6,15 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "node --experimental-strip-types --test packages/schema/test/*.test.ts",
-    "check": "npm test"
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "check": "npm run build && npm test",
+    "release:schema": "npm publish --workspace @firstrung/schema --access public"
   },
   "engines": {
     "node": ">=22.6"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
   }
 }

@@ -10,7 +10,7 @@ import {
   parseRuleDefinition,
   parseRuleResult,
   parseSkillEpisode
-} from "../src/index.ts";
+} from "../dist/index.js";
 
 const candidateAttribution = {
   kind: "candidate_contributed",

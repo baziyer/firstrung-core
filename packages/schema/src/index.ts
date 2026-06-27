@@ -143,6 +143,8 @@ export class SchemaValidationError extends Error {
 
 export function parseCollectorEvent(input: unknown): CollectorEvent {
   const value = object(input, "CollectorEvent");
+  const refs = optionalArray(value.refs, "CollectorEvent.refs", parseEvidenceReference);
+  const metadata = optionalJsonObject(value.metadata, "CollectorEvent.metadata");
 
   return {
     id: string(value.id, "CollectorEvent.id"),
@@ -152,25 +154,27 @@ export function parseCollectorEvent(input: unknown): CollectorEvent {
     observedAt: string(value.observedAt, "CollectorEvent.observedAt"),
     summary: string(value.summary, "CollectorEvent.summary"),
     rawContentIncluded: boolean(value.rawContentIncluded, "CollectorEvent.rawContentIncluded"),
-    refs: optionalArray(value.refs, "CollectorEvent.refs", parseEvidenceReference),
-    metadata: optionalJsonObject(value.metadata, "CollectorEvent.metadata")
+    ...defined({ refs, metadata })
   };
 }
 
 export function parseContributionAttribution(input: unknown): ContributionAttribution {
   const value = object(input, "ContributionAttribution");
+  const actor = optionalString(value.actor, "ContributionAttribution.actor");
+  const timeWindow = optionalTimeWindow(value.timeWindow, "ContributionAttribution.timeWindow");
 
   return {
     kind: oneOf(value.kind, attributionKinds, "ContributionAttribution.kind"),
     confidence: oneOf(value.confidence, confidenceValues, "ContributionAttribution.confidence"),
     basis: stringArray(value.basis, "ContributionAttribution.basis"),
-    actor: optionalString(value.actor, "ContributionAttribution.actor"),
-    timeWindow: optionalTimeWindow(value.timeWindow, "ContributionAttribution.timeWindow")
+    ...defined({ actor, timeWindow })
   };
 }
 
 export function parseEvidenceSignal(input: unknown): EvidenceSignal {
   const value = object(input, "EvidenceSignal");
+  const refs = optionalArray(value.refs, "EvidenceSignal.refs", parseEvidenceReference);
+  const data = optionalJsonObject(value.data, "EvidenceSignal.data");
 
   return {
     id: string(value.id, "EvidenceSignal.id"),
@@ -182,13 +186,24 @@ export function parseEvidenceSignal(input: unknown): EvidenceSignal {
     sourceEventIds: stringArray(value.sourceEventIds, "EvidenceSignal.sourceEventIds"),
     attribution: parseContributionAttribution(value.attribution),
     confidence: oneOf(value.confidence, confidenceValues, "EvidenceSignal.confidence"),
-    refs: optionalArray(value.refs, "EvidenceSignal.refs", parseEvidenceReference),
-    data: optionalJsonObject(value.data, "EvidenceSignal.data")
+    ...defined({ refs, data })
   };
 }
 
 export function parseRuleDefinition(input: unknown): RuleDefinition {
   const value = object(input, "RuleDefinition");
+  const requiredSignals = optionalStringArray(value.requiredSignals, "RuleDefinition.requiredSignals");
+  const attributionRequired = optionalEnumArray(
+    value.attributionRequired,
+    attributionKinds,
+    "RuleDefinition.attributionRequired"
+  );
+  const evidenceTierImpact = optionalEnumArray(
+    value.evidenceTierImpact,
+    evidenceTiers,
+    "RuleDefinition.evidenceTierImpact"
+  );
+  const feedbackTemplates = optionalFeedbackTemplates(value.feedbackTemplates);
 
   return {
     id: string(value.id, "RuleDefinition.id"),
@@ -196,23 +211,14 @@ export function parseRuleDefinition(input: unknown): RuleDefinition {
     version: string(value.version, "RuleDefinition.version"),
     description: string(value.description, "RuleDefinition.description"),
     appliesTo: stringArray(value.appliesTo, "RuleDefinition.appliesTo"),
-    requiredSignals: optionalStringArray(value.requiredSignals, "RuleDefinition.requiredSignals"),
-    attributionRequired: optionalEnumArray(
-      value.attributionRequired,
-      attributionKinds,
-      "RuleDefinition.attributionRequired"
-    ),
-    evidenceTierImpact: optionalEnumArray(
-      value.evidenceTierImpact,
-      evidenceTiers,
-      "RuleDefinition.evidenceTierImpact"
-    ),
-    feedbackTemplates: optionalFeedbackTemplates(value.feedbackTemplates)
+    ...defined({ requiredSignals, attributionRequired, evidenceTierImpact, feedbackTemplates })
   };
 }
 
 export function parseRuleResult(input: unknown): RuleResult {
   const value = object(input, "RuleResult");
+  const evidenceTierImpact = optionalEnumArray(value.evidenceTierImpact, evidenceTiers, "RuleResult.evidenceTierImpact");
+  const feedback = optionalFeedback(value.feedback);
 
   return {
     id: string(value.id, "RuleResult.id"),
@@ -223,13 +229,13 @@ export function parseRuleResult(input: unknown): RuleResult {
     confidence: oneOf(value.confidence, confidenceValues, "RuleResult.confidence"),
     matchedSignalIds: stringArray(value.matchedSignalIds, "RuleResult.matchedSignalIds"),
     attribution: parseContributionAttribution(value.attribution),
-    evidenceTierImpact: optionalEnumArray(value.evidenceTierImpact, evidenceTiers, "RuleResult.evidenceTierImpact"),
-    feedback: optionalFeedback(value.feedback)
+    ...defined({ evidenceTierImpact, feedback })
   };
 }
 
 export function parseSkillEpisode(input: unknown): SkillEpisode {
   const value = object(input, "SkillEpisode");
+  const ruleResultIds = optionalStringArray(value.ruleResultIds, "SkillEpisode.ruleResultIds");
 
   return {
     id: string(value.id, "SkillEpisode.id"),
@@ -241,12 +247,13 @@ export function parseSkillEpisode(input: unknown): SkillEpisode {
     confidence: oneOf(value.confidence, confidenceValues, "SkillEpisode.confidence"),
     supportingSignalIds: stringArray(value.supportingSignalIds, "SkillEpisode.supportingSignalIds"),
     attribution: parseContributionAttribution(value.attribution),
-    ruleResultIds: optionalStringArray(value.ruleResultIds, "SkillEpisode.ruleResultIds")
+    ...defined({ ruleResultIds })
   };
 }
 
 export function parseEvidenceReceipt(input: unknown): EvidenceReceipt {
   const value = object(input, "EvidenceReceipt");
+  const signature = optionalString(value.signature, "EvidenceReceipt.signature");
 
   return {
     id: string(value.id, "EvidenceReceipt.id"),
@@ -262,7 +269,7 @@ export function parseEvidenceReceipt(input: unknown): EvidenceReceipt {
       "EvidenceReceipt.rawDataDisclosure"
     ),
     excludedDataNotice: string(value.excludedDataNotice, "EvidenceReceipt.excludedDataNotice"),
-    signature: optionalString(value.signature, "EvidenceReceipt.signature")
+    ...defined({ signature })
   };
 }
 
@@ -291,6 +298,8 @@ const evidenceTiers = ["observed", "verified", "operated", "repeated", "attested
 
 function parseEvidenceReference(input: unknown): EvidenceReference {
   const value = object(input, "EvidenceReference");
+  const locator = optionalString(value.locator, "EvidenceReference.locator");
+  const redacted = optionalBoolean(value.redacted, "EvidenceReference.redacted");
 
   return {
     kind: oneOf(
@@ -299,8 +308,7 @@ function parseEvidenceReference(input: unknown): EvidenceReference {
       "EvidenceReference.kind"
     ),
     label: string(value.label, "EvidenceReference.label"),
-    locator: optionalString(value.locator, "EvidenceReference.locator"),
-    redacted: optionalBoolean(value.redacted, "EvidenceReference.redacted")
+    ...defined({ locator, redacted })
   };
 }
 
@@ -455,10 +463,10 @@ function optionalTimeWindow(input: unknown, path: string): TimeWindow | undefine
   }
 
   const value = object(input, path);
-  return {
-    startedAt: optionalString(value.startedAt, `${path}.startedAt`),
-    endedAt: optionalString(value.endedAt, `${path}.endedAt`)
-  };
+  const startedAt = optionalString(value.startedAt, `${path}.startedAt`);
+  const endedAt = optionalString(value.endedAt, `${path}.endedAt`);
+
+  return defined({ startedAt, endedAt });
 }
 
 function optionalFeedbackTemplates(input: unknown): RuleDefinition["feedbackTemplates"] {
@@ -467,11 +475,11 @@ function optionalFeedbackTemplates(input: unknown): RuleDefinition["feedbackTemp
   }
 
   const value = object(input, "RuleDefinition.feedbackTemplates");
-  return {
-    matched: optionalString(value.matched, "RuleDefinition.feedbackTemplates.matched"),
-    missingEvidence: optionalString(value.missingEvidence, "RuleDefinition.feedbackTemplates.missingEvidence"),
-    nextStep: optionalString(value.nextStep, "RuleDefinition.feedbackTemplates.nextStep")
-  };
+  const matched = optionalString(value.matched, "RuleDefinition.feedbackTemplates.matched");
+  const missingEvidence = optionalString(value.missingEvidence, "RuleDefinition.feedbackTemplates.missingEvidence");
+  const nextStep = optionalString(value.nextStep, "RuleDefinition.feedbackTemplates.nextStep");
+
+  return defined({ matched, missingEvidence, nextStep });
 }
 
 function optionalFeedback(input: unknown): RuleResult["feedback"] {
@@ -480,9 +488,17 @@ function optionalFeedback(input: unknown): RuleResult["feedback"] {
   }
 
   const value = object(input, "RuleResult.feedback");
+  const missingEvidence = optionalStringArray(value.missingEvidence, "RuleResult.feedback.missingEvidence");
+  const nextStep = optionalString(value.nextStep, "RuleResult.feedback.nextStep");
+
   return {
     summary: string(value.summary, "RuleResult.feedback.summary"),
-    missingEvidence: optionalStringArray(value.missingEvidence, "RuleResult.feedback.missingEvidence"),
-    nextStep: optionalString(value.nextStep, "RuleResult.feedback.nextStep")
+    ...defined({ missingEvidence, nextStep })
+  };
+}
+
+function defined<T extends Record<string, unknown>>(value: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as {
+    [K in keyof T]?: Exclude<T[K], undefined>;
   };
 }
