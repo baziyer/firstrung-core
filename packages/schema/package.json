@@ -1,0 +1,15 @@
+{
+  "name": "@firstrung/schema",
+  "version": "0.0.0",
+  "description": "Public schema contract for FirstRung evidence, attribution, and rule results.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --experimental-strip-types --test test/*.test.ts"
+  }
+}

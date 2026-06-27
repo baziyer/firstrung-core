@@ -13,3 +13,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Private planning and product-development material may exist locally, but is
+# intentionally not tracked in the public core repository.
+/docs/private/
+/docs/prd/
+/docs/dev/
+/openspec/
+*.prd.md
+*.dev.md
+*.internal.md
+*.private.md

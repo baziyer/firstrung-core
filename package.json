@@ -1,0 +1,15 @@
+{
+  "name": "firstrung-core-workspace",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --experimental-strip-types --test packages/schema/test/*.test.ts",
+    "check": "npm test"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

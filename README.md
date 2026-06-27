@@ -6,7 +6,7 @@ FirstRung Core is intended to make the local collector, schemas, evidence
 receipt format, basic rules, redaction tools, and local report/profile export
 auditable by candidates, institutions, employers, and contributors.
 
-Status: pre-implementation repository skeleton.
+Status: early public contract scaffold.
 
 ## Scope
 
@@ -39,7 +39,18 @@ The private platform may depend on this public core.
 
 This public core must never depend on private platform code.
 
-See `docs/repo-boundaries.md`.
+Detailed PRDs, OpenSpecs, proprietary rule packs, benchmarks, outcome models,
+and product strategy belong in the private platform repository. If private
+planning material is copied into this checkout locally, keep it under ignored
+paths such as `docs/private/`, `docs/prd/`, `docs/dev/`, or `openspec/`.
+
+## Development
+
+This repository uses npm workspaces and Node's built-in test runner.
+
+```bash
+npm test
+```
 
 ## License
 
