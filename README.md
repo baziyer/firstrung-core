@@ -1,8 +1,8 @@
-# AI Builder Core
+# FirstRung Core
 
-Open-source trust layer for AI Builder Passport.
+Open-source trust layer for FirstRung.
 
-AI Builder Core is intended to make the local collector, schemas, evidence
+FirstRung Core is intended to make the local collector, schemas, evidence
 receipt format, basic rules, redaction tools, and local report/profile export
 auditable by candidates, institutions, employers, and contributors.
 

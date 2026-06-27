@@ -2,8 +2,7 @@
 
 ## Role of This Repository
 
-`ai-builder-core` is the public, open-source trust layer for AI Builder
-Passport.
+`firstrung-core` is the public, open-source trust layer for FirstRung.
 
 It should be possible for candidates and institutions to inspect what the local
 collector reads, how evidence signals are derived, how rules are evaluated, how
@@ -30,7 +29,7 @@ This repository owns:
 
 ## Out of Scope
 
-The following belong in the private `ai-builder` platform repository:
+The following belong in the private `firstrung` platform repository:
 
 - hosted candidate passport service;
 - user accounts and identity;
@@ -49,13 +48,13 @@ The following belong in the private `ai-builder` platform repository:
 Allowed:
 
 ```text
-private ai-builder platform -> ai-builder-core
+private firstrung platform -> firstrung-core
 ```
 
 Not allowed:
 
 ```text
-ai-builder-core -> private ai-builder platform
+firstrung-core -> private firstrung platform
 ```
 
 This repository must remain independently buildable and testable.
