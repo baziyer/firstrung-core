@@ -5,10 +5,15 @@ import {
   SchemaValidationError,
   parseCollectorEvent,
   parseContributionAttribution,
+  parseCandidateReflection,
   parseEvidenceReceipt,
   parseEvidenceSignal,
+  parseFeedbackItem,
+  parseProfileExport,
+  parseProject,
   parseRuleDefinition,
   parseRuleResult,
+  parseScanArtifact,
   parseSkillEpisode
 } from "../dist/index.js";
 
@@ -61,6 +66,52 @@ describe("@firstrung/schema", () => {
   it("keeps candidate and pre-existing attribution distinct", () => {
     assert.equal(parseContributionAttribution(candidateAttribution).kind, "candidate_contributed");
     assert.equal(parseContributionAttribution(preExistingAttribution).kind, "pre_existing");
+  });
+
+  it("validates project, feedback, reflection, and profile export objects", () => {
+    const project = parseProject({
+      id: "project_booking_app",
+      name: "booking-app",
+      createdAt: "2026-06-20T09:00:00Z",
+      repoPath: "/local/booking-app",
+      metadata: {
+        visibility: "local"
+      }
+    });
+
+    const feedback = parseFeedbackItem({
+      id: "feedback_next_step",
+      projectId: project.id,
+      type: "next_step",
+      summary: "Next useful step: add one denied-access test.",
+      generatedAt: "2026-06-20T11:00:00Z",
+      ruleResultId: "result_auth_boundary_testing",
+      attribution: candidateAttribution
+    });
+
+    const reflection = parseCandidateReflection({
+      id: "reflection_1",
+      projectId: project.id,
+      createdAt: "2026-06-20T11:10:00Z",
+      summary: "Candidate chose not to include raw prompts in this local export.",
+      rawPromptIncluded: false,
+      rawResponseIncluded: false
+    });
+
+    const profileExport = parseProfileExport({
+      id: "export_local_profile",
+      projectId: project.id,
+      generatedAt: "2026-06-20T11:15:00Z",
+      skillEpisodeIds: ["episode_auth_testing"],
+      feedbackItemIds: [feedback.id],
+      rawDataDisclosure: "none",
+      excludedDataNotice: "Raw code, prompts, diffs, and private logs are not included."
+    });
+
+    assert.equal(project.name, "booking-app");
+    assert.equal(feedback.type, "next_step");
+    assert.equal(reflection.rawPromptIncluded, false);
+    assert.equal(profileExport.rawDataDisclosure, "none");
   });
 
   it("validates evidence signals from repo and AI-session sources through the same shape", () => {
@@ -164,6 +215,73 @@ describe("@firstrung/schema", () => {
 
     assert.equal(receipt.rawDataDisclosure, "none");
     assert.equal(receipt.attributionSummary.kind, "candidate_contributed");
+  });
+
+  it("validates one-file scan artifacts", () => {
+    const scan = parseScanArtifact({
+      summary: {
+        projectId: "project_booking_app",
+        projectName: "booking-app",
+        requestedPath: "/local/booking-app",
+        repoRoot: "/local/booking-app",
+        currentBranch: "main",
+        targetRef: "HEAD",
+        targetCommit: "a91f",
+        baselineRef: "HEAD",
+        attributionMode: "since",
+        attributionReason: "You passed --since HEAD, so I treated changes after that ref and current working-tree paths as active work.",
+        changedFileCount: 2,
+        trackedFileCount: 10,
+        rawContentIncluded: false
+      },
+      signals: [
+        {
+          id: "signal_test_added",
+          projectId: "project_booking_app",
+          source: "git",
+          signalType: "test.file.changed",
+          observedAt: "2026-06-20T10:15:00Z",
+          summary: "Auth boundary tests were added in candidate window.",
+          sourceEventIds: ["event_git_1"],
+          attribution: candidateAttribution,
+          confidence: "high"
+        }
+      ],
+      rules: [
+        {
+          id: "result_auth_boundary_testing",
+          ruleId: "rule_auth_boundary_testing",
+          projectId: "project_booking_app",
+          evaluatedAt: "2026-06-20T11:00:00Z",
+          matched: true,
+          confidence: "high",
+          matchedSignalIds: ["signal_test_added"],
+          attribution: candidateAttribution,
+          evidenceTierImpact: ["verified"],
+          feedback: {
+            summary: "You added tests near risk-sensitive changes."
+          }
+        }
+      ],
+      episodes: [
+        {
+          id: "episode_auth_testing",
+          projectId: "project_booking_app",
+          type: "high_risk_path_testing",
+          title: "Auth boundary tests added",
+          status: "candidate",
+          evidenceTier: ["verified"],
+          confidence: "high",
+          supportingSignalIds: ["signal_test_added"],
+          attribution: candidateAttribution,
+          ruleResultIds: ["result_auth_boundary_testing"]
+        }
+      ]
+    });
+
+    assert.equal(scan.summary.attributionMode, "since");
+    assert.equal(scan.signals.length, 1);
+    assert.equal(scan.rules[0].matched, true);
   });
 
   it("rejects invalid source values", () => {

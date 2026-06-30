@@ -49,6 +49,15 @@ export interface ContributionAttribution {
   timeWindow?: TimeWindow;
 }
 
+export interface Project {
+  id: string;
+  name: string;
+  createdAt?: string;
+  repoPath?: string;
+  refs?: EvidenceReference[];
+  metadata?: JsonObject;
+}
+
 export interface CollectorEvent {
   id: string;
   projectId: string;
@@ -121,6 +130,41 @@ export interface SkillEpisode {
   ruleResultIds?: string[];
 }
 
+export interface FeedbackItem {
+  id: string;
+  projectId: string;
+  type: "strength" | "gap" | "next_step" | "attribution_note";
+  summary: string;
+  generatedAt: string;
+  ruleResultId?: string;
+  skillEpisodeId?: string;
+  attribution?: ContributionAttribution;
+  refs?: EvidenceReference[];
+}
+
+export interface CandidateReflection {
+  id: string;
+  projectId: string;
+  createdAt: string;
+  summary: string;
+  rawPromptIncluded: boolean;
+  rawResponseIncluded: boolean;
+  refs?: EvidenceReference[];
+  metadata?: JsonObject;
+}
+
+export interface ProfileExport {
+  id: string;
+  projectId: string;
+  generatedAt: string;
+  skillEpisodeIds: string[];
+  feedbackItemIds: string[];
+  rawDataDisclosure: "none" | "redacted" | "selected";
+  excludedDataNotice: string;
+  refs?: EvidenceReference[];
+  metadata?: JsonObject;
+}
+
 export interface EvidenceReceipt {
   id: string;
   projectId: string;
@@ -132,6 +176,29 @@ export interface EvidenceReceipt {
   rawDataDisclosure: "none" | "redacted" | "selected";
   excludedDataNotice: string;
   signature?: string;
+}
+
+export interface ScanSummary {
+  projectId: string;
+  projectName: string;
+  requestedPath: string;
+  repoRoot: string;
+  currentBranch: string;
+  targetRef: string;
+  targetCommit: string;
+  baselineRef?: string;
+  attributionMode: "since" | "working_tree" | "branch" | "unknown";
+  attributionReason: string;
+  changedFileCount: number;
+  trackedFileCount: number;
+  rawContentIncluded: boolean;
+}
+
+export interface ScanArtifact {
+  summary: ScanSummary;
+  signals: EvidenceSignal[];
+  rules: RuleResult[];
+  episodes: SkillEpisode[];
 }
 
 export class SchemaValidationError extends Error {
@@ -168,6 +235,20 @@ export function parseContributionAttribution(input: unknown): ContributionAttrib
     confidence: oneOf(value.confidence, confidenceValues, "ContributionAttribution.confidence"),
     basis: stringArray(value.basis, "ContributionAttribution.basis"),
     ...defined({ actor, timeWindow })
+  };
+}
+
+export function parseProject(input: unknown): Project {
+  const value = object(input, "Project");
+  const createdAt = optionalString(value.createdAt, "Project.createdAt");
+  const repoPath = optionalString(value.repoPath, "Project.repoPath");
+  const refs = optionalArray(value.refs, "Project.refs", parseEvidenceReference);
+  const metadata = optionalJsonObject(value.metadata, "Project.metadata");
+
+  return {
+    id: string(value.id, "Project.id"),
+    name: string(value.name, "Project.name"),
+    ...defined({ createdAt, repoPath, refs, metadata })
   };
 }
 
@@ -251,6 +332,65 @@ export function parseSkillEpisode(input: unknown): SkillEpisode {
   };
 }
 
+export function parseFeedbackItem(input: unknown): FeedbackItem {
+  const value = object(input, "FeedbackItem");
+  const ruleResultId = optionalString(value.ruleResultId, "FeedbackItem.ruleResultId");
+  const skillEpisodeId = optionalString(value.skillEpisodeId, "FeedbackItem.skillEpisodeId");
+  const attribution =
+    value.attribution === undefined ? undefined : parseContributionAttribution(value.attribution);
+  const refs = optionalArray(value.refs, "FeedbackItem.refs", parseEvidenceReference);
+
+  return {
+    id: string(value.id, "FeedbackItem.id"),
+    projectId: string(value.projectId, "FeedbackItem.projectId"),
+    type: oneOf(
+      value.type,
+      ["strength", "gap", "next_step", "attribution_note"] as const,
+      "FeedbackItem.type"
+    ),
+    summary: string(value.summary, "FeedbackItem.summary"),
+    generatedAt: string(value.generatedAt, "FeedbackItem.generatedAt"),
+    ...defined({ ruleResultId, skillEpisodeId, attribution, refs })
+  };
+}
+
+export function parseCandidateReflection(input: unknown): CandidateReflection {
+  const value = object(input, "CandidateReflection");
+  const refs = optionalArray(value.refs, "CandidateReflection.refs", parseEvidenceReference);
+  const metadata = optionalJsonObject(value.metadata, "CandidateReflection.metadata");
+
+  return {
+    id: string(value.id, "CandidateReflection.id"),
+    projectId: string(value.projectId, "CandidateReflection.projectId"),
+    createdAt: string(value.createdAt, "CandidateReflection.createdAt"),
+    summary: string(value.summary, "CandidateReflection.summary"),
+    rawPromptIncluded: boolean(value.rawPromptIncluded, "CandidateReflection.rawPromptIncluded"),
+    rawResponseIncluded: boolean(value.rawResponseIncluded, "CandidateReflection.rawResponseIncluded"),
+    ...defined({ refs, metadata })
+  };
+}
+
+export function parseProfileExport(input: unknown): ProfileExport {
+  const value = object(input, "ProfileExport");
+  const refs = optionalArray(value.refs, "ProfileExport.refs", parseEvidenceReference);
+  const metadata = optionalJsonObject(value.metadata, "ProfileExport.metadata");
+
+  return {
+    id: string(value.id, "ProfileExport.id"),
+    projectId: string(value.projectId, "ProfileExport.projectId"),
+    generatedAt: string(value.generatedAt, "ProfileExport.generatedAt"),
+    skillEpisodeIds: stringArray(value.skillEpisodeIds, "ProfileExport.skillEpisodeIds"),
+    feedbackItemIds: stringArray(value.feedbackItemIds, "ProfileExport.feedbackItemIds"),
+    rawDataDisclosure: oneOf(
+      value.rawDataDisclosure,
+      ["none", "redacted", "selected"] as const,
+      "ProfileExport.rawDataDisclosure"
+    ),
+    excludedDataNotice: string(value.excludedDataNotice, "ProfileExport.excludedDataNotice"),
+    ...defined({ refs, metadata })
+  };
+}
+
 export function parseEvidenceReceipt(input: unknown): EvidenceReceipt {
   const value = object(input, "EvidenceReceipt");
   const signature = optionalString(value.signature, "EvidenceReceipt.signature");
@@ -270,6 +410,42 @@ export function parseEvidenceReceipt(input: unknown): EvidenceReceipt {
     ),
     excludedDataNotice: string(value.excludedDataNotice, "EvidenceReceipt.excludedDataNotice"),
     ...defined({ signature })
+  };
+}
+
+export function parseScanSummary(input: unknown): ScanSummary {
+  const value = object(input, "ScanSummary");
+  const baselineRef = optionalString(value.baselineRef, "ScanSummary.baselineRef");
+
+  return {
+    projectId: string(value.projectId, "ScanSummary.projectId"),
+    projectName: string(value.projectName, "ScanSummary.projectName"),
+    requestedPath: string(value.requestedPath, "ScanSummary.requestedPath"),
+    repoRoot: string(value.repoRoot, "ScanSummary.repoRoot"),
+    currentBranch: string(value.currentBranch, "ScanSummary.currentBranch"),
+    targetRef: string(value.targetRef, "ScanSummary.targetRef"),
+    targetCommit: string(value.targetCommit, "ScanSummary.targetCommit"),
+    ...defined({ baselineRef }),
+    attributionMode: oneOf(
+      value.attributionMode,
+      ["since", "working_tree", "branch", "unknown"] as const,
+      "ScanSummary.attributionMode"
+    ),
+    attributionReason: string(value.attributionReason, "ScanSummary.attributionReason"),
+    changedFileCount: number(value.changedFileCount, "ScanSummary.changedFileCount"),
+    trackedFileCount: number(value.trackedFileCount, "ScanSummary.trackedFileCount"),
+    rawContentIncluded: boolean(value.rawContentIncluded, "ScanSummary.rawContentIncluded")
+  };
+}
+
+export function parseScanArtifact(input: unknown): ScanArtifact {
+  const value = object(input, "ScanArtifact");
+
+  return {
+    summary: parseScanSummary(value.summary),
+    signals: array(value.signals, "ScanArtifact.signals", parseEvidenceSignal),
+    rules: array(value.rules, "ScanArtifact.rules", parseRuleResult),
+    episodes: array(value.episodes, "ScanArtifact.episodes", parseSkillEpisode)
   };
 }
 
@@ -323,6 +499,14 @@ function object(input: unknown, path: string): Record<string, unknown> {
 function string(input: unknown, path: string): string {
   if (typeof input !== "string" || input.length === 0) {
     throw new SchemaValidationError(`${path} must be a non-empty string`);
+  }
+
+  return input;
+}
+
+function number(input: unknown, path: string): number {
+  if (typeof input !== "number" || !Number.isFinite(input)) {
+    throw new SchemaValidationError(`${path} must be a finite number`);
   }
 
   return input;
@@ -401,6 +585,24 @@ function optionalArray<T>(input: unknown, path: string, parseItem: (item: unknow
     return undefined;
   }
 
+  if (!Array.isArray(input)) {
+    throw new SchemaValidationError(`${path} must be an array`);
+  }
+
+  return input.map((item, index) => {
+    try {
+      return parseItem(item);
+    } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw new SchemaValidationError(`${path}[${index}]: ${error.message}`);
+      }
+
+      throw error;
+    }
+  });
+}
+
+function array<T>(input: unknown, path: string, parseItem: (item: unknown) => T): T[] {
   if (!Array.isArray(input)) {
     throw new SchemaValidationError(`${path} must be an array`);
   }

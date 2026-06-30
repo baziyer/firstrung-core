@@ -1,0 +1,36 @@
+{
+  "name": "firstrung",
+  "version": "0.1.0-alpha.0",
+  "description": "Local FirstRung evidence scanner and report CLI.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "firstrung": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@firstrung/collector": "0.1.0-alpha.0",
+    "@firstrung/report": "0.1.0-alpha.0",
+    "@firstrung/rules": "0.1.0-alpha.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baziyer/firstrung-core.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/baziyer/firstrung-core/issues"
+  },
+  "homepage": "https://github.com/baziyer/firstrung-core/tree/main/packages/cli#readme"
+}
+

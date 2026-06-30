@@ -6,7 +6,7 @@ FirstRung Core is intended to make the local collector, schemas, evidence
 receipt format, basic rules, redaction tools, and local report/profile export
 auditable by candidates, institutions, employers, and contributors.
 
-Status: early public contract scaffold.
+Status: local report alpha scaffold.
 
 ## Scope
 
@@ -54,6 +54,56 @@ npm run check
 ```
 
 `npm run check` builds the workspace packages and runs their tests.
+
+## Local Report Alpha
+
+After installing dependencies and building the workspaces, run the local scanner
+against an explicit Git repository:
+
+```bash
+npm run build
+npm exec -- firstrung scan /path/to/project
+```
+
+For clearer contribution attribution, pass a baseline ref:
+
+```bash
+npm exec -- firstrung scan /path/to/project --since main
+```
+
+The default command prints a short candidate-facing summary and writes no files.
+It uses direct language such as "You changed", "I found", and "No evidence
+yet". It excludes raw code, raw prompts, raw diffs, private logs, and
+environment values by default.
+
+To write one local JSON artifact:
+
+```bash
+npm exec -- firstrung scan /path/to/project --out .firstrung/report
+```
+
+That writes:
+
+```text
+.firstrung/report/
+  scan.json
+```
+
+Markdown and split debug artifacts are opt-in:
+
+```bash
+npm exec -- firstrung scan /path/to/project --out .firstrung/report --format all --debug-artifacts
+```
+
+Supported alpha flags:
+
+```text
+--out <path>          optional output directory; omitted by default
+--since <git-ref>     optional baseline ref for attribution
+--branch <name>       optional target branch/ref, default HEAD
+--format <mode>       summary, json, markdown, or all; default summary
+--debug-artifacts     write evidence-signals/rule-results/skill-episodes JSON
+```
 
 ## Publishing
 

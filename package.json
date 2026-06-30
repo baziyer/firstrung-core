@@ -3,7 +3,11 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "packages/*"
+    "packages/schema",
+    "packages/collector",
+    "packages/rules",
+    "packages/report",
+    "packages/cli"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
