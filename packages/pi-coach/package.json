@@ -32,7 +32,7 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "0.80.3",
+    "@earendil-works/pi-coding-agent": "0.80.6",
     "@firstrung/ai-session": "0.1.0-alpha.2",
     "@firstrung/collector": "0.1.0-alpha.2",
     "@firstrung/rules": "0.1.0-alpha.2",
