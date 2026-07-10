@@ -1,0 +1,58 @@
+name: Feature request
+description: Propose a public-core contribution or improvement.
+title: "Feature: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        FirstRung Core is the public trust layer. Hosted passport, employer,
+        institution, benchmark, outcome-model, attestation, paid-project, and
+        private strategy work is out of scope for this repository.
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Contribution lane
+      options:
+        - Documentation or examples
+        - Schema contract
+        - Local Git collector
+        - Deterministic rules
+        - Report output
+        - Redaction or secret-safety
+        - Local adapter
+        - Release or package hygiene
+        - Other public-core work
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or contributor problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Keep this scoped to public-core behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and trust impact
+      description: What would the tool read, write, print, upload, or avoid collecting?
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This request stays within the public-core scope.
+          required: true
+        - label: This request does not require private PRDs, OpenSpecs, benchmarks, outcome models, or commercial strategy.
+          required: true

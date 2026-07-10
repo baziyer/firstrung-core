@@ -1,0 +1,273 @@
+{
+  "schemaVersion": "firstrung.eval.corpus.v1",
+  "corpusVersion": "2026-07-10.2",
+  "dataPolicy": {
+    "classification": "synthetic_only",
+    "containsHumanFeedback": false,
+    "containsRepositoryData": false,
+    "networkAllowed": false
+  },
+  "defaults": {
+    "expect": {
+      "maxLines": 5,
+      "maxWords": 65,
+      "maxMarkdownLines": 45,
+      "maxMarkdownWords": 180,
+      "forbiddenText": ["You ", "tests passed", "verified", "authorship confirmed", "\u001b"],
+      "forbiddenMarkdownText": ["tests passed", "authorship confirmed", "\u001b"]
+    }
+  },
+  "cases": [
+    {
+      "id": "risk-path-without-test",
+      "category": "tier_and_action",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.changed", "path": "src/auth/session.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "excludeRuleIds": ["rule_tests_near_risky_files"],
+        "allowedEvidenceTiers": ["observed"],
+        "maxLines": 5,
+        "maxWords": 65,
+        "requiredText": ["Path heuristic: src/auth/session.ts matched auth; no closely related test path was found."],
+        "forbiddenText": ["You ", "verified"]
+      }
+    },
+    {
+      "id": "risk-path-with-related-test",
+      "category": "tier_and_relation",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.changed", "path": "src/auth/session.ts", "attribution": "change_window" },
+        { "type": "test.file.changed", "path": "tests/auth/session.test.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_tests_near_risky_files"],
+        "excludeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "allowedEvidenceTiers": ["observed"],
+        "maxLines": 5,
+        "maxWords": 65,
+        "requiredText": ["Path relation: src/auth/session.ts matched auth and a closely related changed test path; test execution was not observed."],
+        "forbiddenText": ["You ", "tests passed", "verified"]
+      }
+    },
+    {
+      "id": "unrelated-same-directory-test",
+      "category": "adversarial_path_relation",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.changed", "path": "src/auth/session.ts", "attribution": "change_window" },
+        { "type": "test.file.changed", "path": "src/auth/permissions.test.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "excludeRuleIds": ["rule_tests_near_risky_files"],
+        "allowedEvidenceTiers": ["observed"]
+      }
+    },
+    {
+      "id": "removed-test-does-not-count",
+      "category": "adversarial_status",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.changed", "path": "src/auth/session.ts", "attribution": "change_window" },
+        { "type": "test.file.removed", "path": "src/auth/session.test.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "excludeRuleIds": ["rule_tests_near_risky_files"],
+        "allowedEvidenceTiers": ["observed"]
+      }
+    },
+    {
+      "id": "renamed-test-does-not-count",
+      "category": "adversarial_status",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.changed", "path": "src/auth/session.ts", "attribution": "change_window" },
+        { "type": "test.file.renamed", "path": "src/auth/session.test.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "excludeRuleIds": ["rule_tests_near_risky_files"],
+        "allowedEvidenceTiers": ["observed"]
+      }
+    },
+    {
+      "id": "test-only-change-is-not-production-risk",
+      "category": "attribution_and_scope",
+      "kind": "rules",
+      "signals": [
+        { "type": "test.file.changed", "path": "src/auth/session.test.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "excludeRuleIds": ["rule_risky_files_without_nearby_tests", "rule_tests_near_risky_files"],
+        "allowedEvidenceTiers": ["observed"],
+        "forbiddenText": ["You ", "auth changes"]
+      }
+    },
+    {
+      "id": "default-copy-hides-private-sentinels",
+      "category": "privacy_and_copy_budget",
+      "kind": "rules",
+      "signals": [
+        {
+          "type": "file.changed",
+          "path": "src/feature.ts",
+          "attribution": "change_window",
+          "summary": "PRIVATE_PROMPT_SENTINEL SECRET_ENV_SENTINEL",
+          "categories": ["code"]
+        }
+      ],
+      "expect": {
+        "maxLines": 5,
+        "maxWords": 65,
+        "forbiddenText": ["PRIVATE_PROMPT_SENTINEL", "SECRET_ENV_SENTINEL", "You "]
+      }
+    },
+    {
+      "id": "issue-template-config-is-not-risk",
+      "category": "adversarial_path_classification",
+      "kind": "repository",
+      "baselineFiles": [
+        { "path": "README.md", "content": "# Synthetic fixture\n" }
+      ],
+      "changes": [
+        { "operation": "write", "path": ".github/ISSUE_TEMPLATE/config.yml", "content": "blank_issues_enabled: false\n" }
+      ],
+      "expect": {
+        "includeSignalTypes": ["file.changed"],
+        "excludeSignalPrefixes": ["risk.file.", "deployment.config."],
+        "changedAttribution": "change_window",
+        "maxLines": 5,
+        "maxWords": 65
+      }
+    },
+    {
+      "id": "collector-auth-test-only-is-not-risk",
+      "category": "adversarial_path_classification",
+      "kind": "repository",
+      "baselineFiles": [
+        { "path": "src/auth/session.test.ts", "content": "test('session', () => {});\n" }
+      ],
+      "changes": [
+        { "operation": "write", "path": "src/auth/session.test.ts", "content": "test('session update', () => {});\n" }
+      ],
+      "expect": {
+        "includeSignalTypes": ["test.file.changed"],
+        "excludeSignalPrefixes": ["risk.file."],
+        "changedAttribution": "change_window",
+        "maxLines": 5,
+        "maxWords": 65
+      }
+    },
+    {
+      "id": "leading-dot-workflow-path-is-preserved",
+      "category": "git_metadata_integrity",
+      "kind": "repository",
+      "baselineFiles": [
+        { "path": ".github/workflows/ci.yml", "content": "name: CI\n" }
+      ],
+      "changes": [
+        { "operation": "write", "path": ".github/workflows/ci.yml", "content": "name: CI updated\n" }
+      ],
+      "expect": {
+        "includeSignalTypes": ["deployment.config.changed"],
+        "excludeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "changedAttribution": "change_window",
+        "maxLines": 5,
+        "maxWords": 65,
+        "requiredText": [
+          "Path heuristic: .github/workflows/ci.yml matched CI workflow metadata.",
+          "Next: run or observe the relevant CI workflow."
+        ]
+      }
+    },
+    {
+      "id": "colliding-readable-path-slugs-remain-distinct",
+      "category": "signal_identity_and_multi_gap",
+      "kind": "repository",
+      "baselineFiles": [
+        { "path": "README.md", "content": "# Synthetic fixture\n" }
+      ],
+      "changes": [
+        { "operation": "write", "path": "src/auth/foo-bar.ts", "content": "export const dashed = true;\n" },
+        { "operation": "write", "path": "src/auth/foo_bar.ts", "content": "export const underscored = true;\n" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "signalTypeCounts": { "file.changed": 2, "risk.file.added": 2 },
+        "includeSignalPaths": ["src/auth/foo-bar.ts", "src/auth/foo_bar.ts"],
+        "uniqueSignalIds": true,
+        "changedAttribution": "change_window",
+        "requiredText": ["1 additional risk path matched."]
+      }
+    },
+    {
+      "id": "deleted-risk-path-remains-actionable",
+      "category": "risk_change_kind",
+      "kind": "repository",
+      "baselineFiles": [
+        { "path": "src/auth/session.ts", "content": "export const session = true;\n" }
+      ],
+      "changes": [
+        { "operation": "delete", "path": "src/auth/session.ts" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "includeSignalTypes": ["risk.file.removed"],
+        "includeSignalPaths": ["src/auth/session.ts"],
+        "changedAttribution": "change_window",
+        "requiredText": ["Path heuristic: src/auth/session.ts matched auth"]
+      }
+    },
+    {
+      "id": "renamed-risk-path-remains-actionable",
+      "category": "risk_change_kind",
+      "kind": "repository",
+      "baselineFiles": [
+        { "path": "src/auth/session.ts", "content": "export const session = true;\n" }
+      ],
+      "changes": [
+        { "operation": "rename", "path": "src/auth/session.ts", "to": "src/auth/session-next.ts" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "includeSignalTypes": ["risk.file.renamed"],
+        "includeSignalPaths": ["src/auth/session-next.ts"],
+        "changedAttribution": "change_window",
+        "requiredText": ["Path heuristic: src/auth/session-next.ts matched auth"]
+      }
+    },
+    {
+      "id": "copied-risk-and-test-paths-are-present",
+      "category": "risk_change_kind",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.copied", "path": "src/auth/session.ts", "attribution": "change_window" },
+        { "type": "test.file.copied", "path": "tests/auth/session.test.ts", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_tests_near_risky_files"],
+        "excludeRuleIds": ["rule_risky_files_without_nearby_tests"],
+        "requiredText": ["closely related changed test path"]
+      }
+    },
+    {
+      "id": "risk-gap-precedes-deployment-observation",
+      "category": "mixed_rule_priority",
+      "kind": "rules",
+      "signals": [
+        { "type": "risk.file.changed", "path": "src/auth/session.ts", "attribution": "change_window" },
+        { "type": "deployment.config.changed", "path": "vercel.json", "attribution": "change_window" }
+      ],
+      "expect": {
+        "includeRuleIds": ["rule_risky_files_without_nearby_tests", "rule_deployment_config_evidence"],
+        "requiredText": ["Path heuristic: src/auth/session.ts matched auth"],
+        "forbiddenText": ["matched deployment config metadata"]
+      }
+    }
+  ]
+}

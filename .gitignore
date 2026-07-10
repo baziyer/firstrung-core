@@ -7,6 +7,8 @@ coverage/
 .turbo/
 .next/
 .vercel/
+.firstrung/
+*.tgz
 .env
 .env.*
 !.env.example

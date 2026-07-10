@@ -1,0 +1,43 @@
+{
+  "name": "@firstrung/report",
+  "version": "0.1.0-alpha.2",
+  "description": "Local report renderer for FirstRung alpha scans.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "dependencies": {
+    "@firstrung/schema": "0.1.0-alpha.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baziyer/firstrung-core.git",
+    "directory": "packages/report"
+  },
+  "bugs": {
+    "url": "https://github.com/baziyer/firstrung-core/issues"
+  },
+  "homepage": "https://github.com/baziyer/firstrung-core/tree/main/packages/report#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
