@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { basename, resolve } from "node:path";
 
 import type {
@@ -45,6 +46,8 @@ interface ChangedEntry {
   path: string;
   status: string;
 }
+
+type ChangeKind = "added" | "modified" | "deleted" | "renamed" | "copied" | "other";
 
 interface CommitSummary {
   shortHash: string;
@@ -162,7 +165,12 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
   const signals: EvidenceSignal[] = [];
   for (const entry of changedEntries) {
     const classification = classifyPath(entry.path);
-    const attribution = attributionFor("candidate_contributed", ["file changed in the selected contribution window"], "high");
+    const changeKind = classifyChangeKind(entry.status);
+    const attribution = attributionFor(
+      "change_window",
+      ["path changed in the selected Git window", "person attribution was not evaluated"],
+      "high"
+    );
 
     signals.push(
       buildSignal({
@@ -170,7 +178,7 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
         projectId,
         observedAt,
         signalType: "file.changed",
-        summary: `Path changed in the selected contribution window: ${entry.path}.`,
+        summary: `Path changed in the selected Git window: ${entry.path}.`,
         sourceEventIds: [inventoryEventId],
         attribution,
         confidence: "high",
@@ -178,6 +186,7 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
         data: {
           path: entry.path,
           status: entry.status,
+          changeKind,
           categories: classification.categories
         }
       })
@@ -189,16 +198,18 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
           prefix: "risk_changed",
           projectId,
           observedAt,
-          signalType: "risk.file.changed",
-          summary: `Risk-sensitive path changed in the selected contribution window: ${entry.path}.`,
+          signalType: changeSignalType("risk.file", changeKind),
+          summary: `Potentially risk-sensitive path ${changeSummaryVerb(changeKind)} in the selected Git window: ${entry.path}.`,
           sourceEventIds: [inventoryEventId],
           attribution,
-          confidence: "high",
+          confidence: "medium",
           path: entry.path,
           data: {
             path: entry.path,
             status: entry.status,
-            riskCategories: classification.riskCategories
+            changeKind,
+            riskCategories: classification.riskCategories,
+            classificationBasis: "path_metadata_only"
           }
         })
       );
@@ -210,15 +221,16 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
           prefix: "test_changed",
           projectId,
           observedAt,
-          signalType: "test.file.changed",
-          summary: `Test path changed in the selected contribution window: ${entry.path}.`,
+          signalType: changeSignalType("test.file", changeKind),
+          summary: `Test path ${changeSummaryVerb(changeKind)} in the selected Git window: ${entry.path}.`,
           sourceEventIds: [inventoryEventId],
           attribution,
           confidence: "high",
           path: entry.path,
           data: {
             path: entry.path,
-            status: entry.status
+            status: entry.status,
+            changeKind
           }
         })
       );
@@ -230,15 +242,16 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
           prefix: "deployment_changed",
           projectId,
           observedAt,
-          signalType: "deployment.config.changed",
-          summary: `Deployment/config path changed in the selected contribution window: ${entry.path}.`,
+          signalType: changeSignalType("deployment.config", changeKind),
+          summary: `Deployment/config path ${changeSummaryVerb(changeKind)} in the selected Git window: ${entry.path}.`,
           sourceEventIds: [inventoryEventId],
           attribution,
           confidence: "high",
           path: entry.path,
           data: {
             path: entry.path,
-            status: entry.status
+            status: entry.status,
+            changeKind
           }
         })
       );
@@ -250,15 +263,16 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
           prefix: "dependency_changed",
           projectId,
           observedAt,
-          signalType: "dependency.file.changed",
-          summary: `Dependency or package file changed in the selected contribution window: ${entry.path}.`,
+          signalType: changeSignalType("dependency.file", changeKind),
+          summary: `Dependency or package path ${changeSummaryVerb(changeKind)} in the selected Git window: ${entry.path}.`,
           sourceEventIds: [inventoryEventId],
           attribution,
           confidence: "medium",
           path: entry.path,
           data: {
             path: entry.path,
-            status: entry.status
+            status: entry.status,
+            changeKind
           }
         })
       );
@@ -272,7 +286,7 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
   const inventoryAttribution =
     comparison.mode === "unknown"
       ? attributionFor("unknown", ["no reliable comparison boundary was available"], "low")
-      : attributionFor("pre_existing", ["tracked paths were present but not changed in the selected contribution window"], "medium");
+      : attributionFor("pre_existing", ["tracked paths were present outside the selected Git change window"], "medium");
 
   for (const path of unchangedTrackedFiles) {
     const classification = classifyPath(path);
@@ -317,8 +331,12 @@ export async function collectRepository(input: CollectRepositoryInput): Promise<
 async function getRepoRoot(path: string): Promise<string> {
   try {
     return await git(path, ["rev-parse", "--show-toplevel"]);
-  } catch {
-    throw new CollectorError(`FirstRung alpha scans require a Git repository: ${path}`);
+  } catch (error) {
+    if (error instanceof CollectorError) {
+      throw error;
+    }
+
+    throw new CollectorError(`FirstRung alpha scans require a Git repository: ${path}. Choose a Git repo path or run git init first.`);
   }
 }
 
@@ -330,7 +348,11 @@ async function readCurrentBranch(repoRoot: string): Promise<string> {
 async function readVerifiedCommit(repoRoot: string, ref: string, message: string): Promise<string> {
   try {
     return await git(repoRoot, ["rev-parse", "--short=12", `${ref}^{commit}`]);
-  } catch {
+  } catch (error) {
+    if (error instanceof CollectorError) {
+      throw error;
+    }
+
     throw new CollectorError(message);
   }
 }
@@ -343,18 +365,22 @@ async function resolveComparison(
   since?: string
 ): Promise<{ baselineRef?: string; mode: AttributionMode; reason: string }> {
   if (since) {
-    await readVerifiedCommit(repoRoot, since, `Could not resolve --since ref '${since}'.`);
+    await readVerifiedCommit(
+      repoRoot,
+      since,
+      `Could not resolve --since ref '${since}'. Use a branch, tag, or commit that exists in this repo. Try git branch --all or git log --oneline --max-count=5.`
+    );
     return {
       baselineRef: since,
       mode: "since",
-      reason: `You passed --since ${since}, so I treated changes after that ref and current working-tree paths as active work.`
+      reason: `Scope: changes after ${since}, plus current working-tree paths. This identifies a Git window, not a person.`
     };
   }
 
   if (workingTreeChangeCount > 0) {
     return {
       mode: "working_tree",
-      reason: "I found uncommitted changes and no --since ref was provided, so I focused on the working tree."
+      reason: "Scope: current working-tree paths because no --since ref was provided. This identifies a Git window, not a person."
     };
   }
 
@@ -363,13 +389,13 @@ async function resolveComparison(
     return {
       baselineRef: fallback,
       mode: "branch",
-      reason: `No --since ref was provided and the working tree looked clean, so I compared ${targetRef} with ${fallback}.`
+      reason: `Scope: ${fallback}...${targetRef} because the working tree was clean. This identifies a Git window, not a person.`
     };
   }
 
   return {
     mode: "unknown",
-    reason: "I could not find a working-tree change set or a reliable branch baseline, so attribution is conservative."
+    reason: "Scope: no reliable Git change window was found. Person attribution was not evaluated."
   };
 }
 
@@ -393,7 +419,11 @@ async function refExists(repoRoot: string, ref: string): Promise<boolean> {
   try {
     await git(repoRoot, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
     return true;
-  } catch {
+  } catch (error) {
+    if (error instanceof CollectorError) {
+      throw error;
+    }
+
     return false;
   }
 }
@@ -402,14 +432,22 @@ async function readChangedEntries(repoRoot: string, baselineRef: string, targetR
   const range = `${baselineRef}...${targetRef}`;
 
   try {
-    return parseNameStatus(await git(repoRoot, ["diff", "--name-status", "-z", "--find-renames", range]));
+    return parseNameStatus(
+      await git(repoRoot, ["diff", "--name-status", "-z", "--find-renames", "--find-copies", range], { trim: false })
+    );
   } catch {
-    return parseNameStatus(await git(repoRoot, ["diff", "--name-status", "-z", "--find-renames", `${baselineRef}..${targetRef}`]));
+    return parseNameStatus(
+      await git(
+        repoRoot,
+        ["diff", "--name-status", "-z", "--find-renames", "--find-copies", `${baselineRef}..${targetRef}`],
+        { trim: false }
+      )
+    );
   }
 }
 
 async function readTrackedFiles(repoRoot: string): Promise<string[]> {
-  const output = await git(repoRoot, ["ls-files", "-z"]);
+  const output = await git(repoRoot, ["ls-files", "-z"], { trim: false });
   return output
     .split("\0")
     .filter((path) => path.length > 0)
@@ -418,7 +456,7 @@ async function readTrackedFiles(repoRoot: string): Promise<string[]> {
 }
 
 async function readWorkingTreeEntries(repoRoot: string): Promise<ChangedEntry[]> {
-  const output = await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  const output = await git(repoRoot, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], { trim: false });
   return parsePorcelainStatus(output);
 }
 
@@ -485,19 +523,20 @@ function parsePorcelainStatus(output: string): ChangedEntry[] {
     }
 
     const rawStatus = record.slice(0, 2);
-    let path = record.slice(3);
+    const path = record.slice(3);
 
     if (rawStatus.includes("R") || rawStatus.includes("C")) {
-      path = parts[index] ?? path;
+      // Porcelain -z reports the destination in the record and the source as
+      // the following NUL-delimited field. Keep the present destination path.
       index += 1;
     }
 
-    path = normalizeGitPath(path);
+    const normalizedPath = normalizeGitPath(path);
 
-    if (path.length > 0 && !shouldIgnoreLocalPath(path)) {
+    if (normalizedPath.length > 0 && !shouldIgnoreLocalPath(normalizedPath)) {
       entries.push({
         status: `WT:${rawStatus.trim() || rawStatus}`,
-        path
+        path: normalizedPath
       });
     }
   }
@@ -530,37 +569,6 @@ function classifyPath(path: string): PathClassification {
   const lower = normalized.toLowerCase();
   const segments = lower.split("/");
   const fileName = segments[segments.length - 1] ?? lower;
-  const riskCategories = new Set<string>();
-  const isDeploymentConfig = matchesDeploymentConfig(lower, segments, fileName);
-
-  if (matchesAnySegment(segments, ["auth", "authentication", "login", "logout", "oauth", "jwt", "session", "sessions", "sso"])) {
-    riskCategories.add("auth");
-  }
-
-  if (matchesAnySegment(segments, ["payment", "payments", "billing", "stripe", "checkout", "subscription", "subscriptions"])) {
-    riskCategories.add("payments");
-  }
-
-  if (matchesAnySegment(segments, ["database", "databases", "db", "sql", "prisma", "drizzle", "schema"])) {
-    riskCategories.add("database");
-  }
-
-  if (matchesAnySegment(segments, ["permission", "permissions", "rbac", "acl", "policy", "policies", "role", "roles"])) {
-    riskCategories.add("permissions");
-  }
-
-  if (matchesAnySegment(segments, ["migration", "migrations"])) {
-    riskCategories.add("migrations");
-  }
-
-  if (matchesAnySegment(segments, ["secret", "secrets", "credential", "credentials", "config", "configs"]) || fileName.startsWith(".env")) {
-    riskCategories.add("secrets_config");
-  }
-
-  if (isDeploymentConfig) {
-    riskCategories.add("infrastructure_deploy");
-  }
-
   const isTest = matchesTestPath(lower, segments, fileName);
   const isDependencyFile = matchesDependencyFile(fileName);
   const isDocumentation =
@@ -569,6 +577,43 @@ function classifyPath(path: string): PathClassification {
     segments.includes("documentation") ||
     segments.includes("openspec");
   const isCode = matchesCodePath(fileName);
+  const documentationOnly = isDocumentation && !isCode && !isDependencyFile;
+  const isDeploymentConfig = !documentationOnly && matchesDeploymentConfig(lower, segments, fileName);
+  const riskCategories = new Set<string>();
+
+  if (!documentationOnly && !isTest) {
+    if (matchesAnySegment(segments, ["auth", "authentication", "login", "logout", "oauth", "jwt", "sso"])) {
+      riskCategories.add("auth");
+    }
+
+    if (matchesAnySegment(segments, ["payment", "payments", "billing", "stripe", "checkout", "subscription", "subscriptions"])) {
+      riskCategories.add("payments");
+    }
+
+    if (
+      matchesAnySegment(segments, ["database", "databases", "db", "sql", "prisma", "drizzle"]) ||
+      lower.endsWith("schema.prisma")
+    ) {
+      riskCategories.add("database");
+    }
+
+    if (matchesAnySegment(segments, ["permission", "permissions", "rbac", "acl", "policy", "policies"])) {
+      riskCategories.add("permissions");
+    }
+
+    if (matchesAnySegment(segments, ["migration", "migrations"])) {
+      riskCategories.add("migrations");
+    }
+
+    if (matchesAnySegment(segments, ["secret", "secrets", "credential", "credentials"]) || fileName.startsWith(".env")) {
+      riskCategories.add("secrets_config");
+    }
+  }
+
+  if (isDeploymentConfig) {
+    riskCategories.add("infrastructure_deploy");
+  }
+
   const categories = categoriesFor({
     riskCategories: [...riskCategories],
     isTest,
@@ -783,7 +828,7 @@ function buildSignal(input: {
   data: JsonObject;
 }): EvidenceSignal {
   return {
-    id: `signal_${input.prefix}_${slug(input.path)}`,
+    id: pathSignalId(input.prefix, input.path),
     projectId: input.projectId,
     source: "git",
     signalType: input.signalType,
@@ -852,23 +897,22 @@ function normalizeGitPath(path: string): string {
   return path.replace(/\\/g, "/");
 }
 
+function pathSignalId(prefix: string, path: string): string {
+  const normalizedPath = normalizeGitPath(path);
+  const pathHash = createHash("sha256").update(normalizedPath).digest("hex").slice(0, 24);
+  return `signal_${prefix}_${slug(normalizedPath)}_${pathHash}`;
+}
+
 function slug(value: string): string {
   const slugged = value.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   return slugged.length > 0 ? slugged.slice(0, 96) : "unknown";
 }
 
 function areRelatedPaths(left: string, right: string): boolean {
-  const leftParts = normalizeGitPath(left).toLowerCase().split("/").filter(Boolean);
-  const rightParts = normalizeGitPath(right).toLowerCase().split("/").filter(Boolean);
-  const leftBase = baseWithoutTestTokens(leftParts[leftParts.length - 1] ?? "");
-  const rightBase = baseWithoutTestTokens(rightParts[rightParts.length - 1] ?? "");
-  const sharedDirectoryDepth = commonPrefixLength(leftParts.slice(0, -1), rightParts.slice(0, -1));
+  const leftModule = normalizedModulePath(left);
+  const rightModule = normalizedModulePath(right);
 
-  return (
-    (leftBase.length > 0 && rightBase.length > 0 && leftBase === rightBase) ||
-    sharedDirectoryDepth >= Math.max(1, Math.min(leftParts.length, rightParts.length) - 2) ||
-    sharedPathToken(leftParts, rightParts)
-  );
+  return leftModule.length > 0 && leftModule === rightModule;
 }
 
 function baseWithoutTestTokens(fileName: string): string {
@@ -879,27 +923,67 @@ function baseWithoutTestTokens(fileName: string): string {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-function commonPrefixLength(left: string[], right: string[]): number {
-  let count = 0;
+function normalizedModulePath(path: string): string {
+  const ignoredDirectories = new Set(["src", "app", "lib", "server", "client", "test", "tests", "__tests__", "spec", "specs"]);
+  const parts = normalizeGitPath(path).toLowerCase().split("/").filter(Boolean);
+  const fileName = parts.pop() ?? "";
+  const base = baseWithoutTestTokens(fileName);
 
-  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
-    if (left[index] !== right[index]) {
-      break;
-    }
-
-    count += 1;
+  if (base.length === 0) {
+    return "";
   }
 
-  return count;
+  return [...parts.filter((part) => !ignoredDirectories.has(part)), base].join("/");
 }
 
-function sharedPathToken(left: string[], right: string[]): boolean {
-  const ignored = new Set(["src", "app", "lib", "server", "client", "test", "tests", "__tests__", "spec", "specs"]);
-  const leftTokens = new Set(left.flatMap((part) => part.split(/[^a-z0-9]+/)).filter((part) => part.length > 2 && !ignored.has(part)));
+function classifyChangeKind(status: string): ChangeKind {
+  const normalized = status.replace(/^WT:/, "").toUpperCase();
 
-  return right
-    .flatMap((part) => part.split(/[^a-z0-9]+/))
-    .some((part) => part.length > 2 && leftTokens.has(part));
+  if (normalized.includes("?")) {
+    return "added";
+  }
+
+  if (normalized.startsWith("R") || normalized.includes("R")) {
+    return "renamed";
+  }
+
+  if (normalized.startsWith("C") || normalized.includes("C")) {
+    return "copied";
+  }
+
+  if (normalized.includes("D")) {
+    return "deleted";
+  }
+
+  if (normalized.includes("A")) {
+    return "added";
+  }
+
+  if (normalized.includes("M")) {
+    return "modified";
+  }
+
+  return "other";
+}
+
+function changeSignalType(prefix: string, changeKind: ChangeKind): string {
+  if (changeKind === "modified" || changeKind === "other") {
+    return `${prefix}.changed`;
+  }
+
+  if (changeKind === "deleted") {
+    return `${prefix}.removed`;
+  }
+
+  return `${prefix}.${changeKind}`;
+}
+
+function changeSummaryVerb(changeKind: ChangeKind): string {
+  if (changeKind === "other") {
+    return "changed";
+  }
+
+  return `was ${changeKind}`;
 }
 
 function optional<T extends Record<string, unknown>>(value: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
@@ -908,7 +992,7 @@ function optional<T extends Record<string, unknown>>(value: T): { [K in keyof T]
   };
 }
 
-function git(cwd: string, args: readonly string[]): Promise<string> {
+function git(cwd: string, args: readonly string[], options: { trim?: boolean } = {}): Promise<string> {
   return new Promise((resolveOutput, reject) => {
     execFile(
       "git",
@@ -919,14 +1003,32 @@ function git(cwd: string, args: readonly string[]): Promise<string> {
       },
       (error, stdout, stderr) => {
         if (error) {
+          if (isMissingExecutable(error)) {
+            reject(
+              new CollectorError(
+                "FirstRung alpha scans require Git to be installed and available on PATH. Install Git, then rerun the scan."
+              )
+            );
+            return;
+          }
+
           error.stderr = stderr;
           error.stdout = stdout;
           reject(error);
           return;
         }
 
-        resolveOutput(stdout.trim());
+        resolveOutput(options.trim === false ? stdout : stdout.trim());
       }
     );
   });
+}
+
+function isMissingExecutable(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }

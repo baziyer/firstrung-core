@@ -1,27 +1,44 @@
 {
   "name": "firstrung",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.2",
   "description": "Local FirstRung evidence scanner and report CLI.",
+  "firstrung": {
+    "outputContract": "terminal-brief-v1",
+    "scanSchemaVersion": "firstrung.scan.v1",
+    "feedbackPacketSchemaVersion": "firstrung.feedback.v1",
+    "rulesetVersion": "2026-07-10.1",
+    "templateVersion": "2026-07-10.1",
+    "rendererVersion": "2026-07-10.1",
+    "defaultMaxNonblankLines": 5,
+    "defaultTargetMaxWords": 65
+  },
   "type": "module",
   "license": "Apache-2.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "firstrung": "./dist/index.js"
+    "firstrung": "dist/index.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "scripts/postinstall-check.cjs"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.js",
+    "postinstall": "node scripts/postinstall-check.cjs",
     "prepublishOnly": "npm run build"
   },
+  "engines": {
+    "node": ">=22.6"
+  },
   "dependencies": {
-    "@firstrung/collector": "0.1.0-alpha.0",
-    "@firstrung/report": "0.1.0-alpha.0",
-    "@firstrung/rules": "0.1.0-alpha.0"
+    "@firstrung/collector": "0.1.0-alpha.2",
+    "@firstrung/report": "0.1.0-alpha.2",
+    "@firstrung/rules": "0.1.0-alpha.2",
+    "@firstrung/schema": "0.1.0-alpha.2"
   },
   "repository": {
     "type": "git",
@@ -33,4 +50,3 @@
   },
   "homepage": "https://github.com/baziyer/firstrung-core/tree/main/packages/cli#readme"
 }
-

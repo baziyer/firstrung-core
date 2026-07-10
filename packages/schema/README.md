@@ -18,20 +18,24 @@ const signal = parseEvidenceSignal({
   id: "signal_test_added",
   projectId: "project_booking_app",
   source: "git",
-  signalType: "test.file.added",
+  signalType: "test.file.changed",
   observedAt: "2026-06-20T10:15:00Z",
-  summary: "Auth boundary tests were added in the candidate contribution window.",
+  summary: "An auth test path changed in the selected Git window.",
   sourceEventIds: ["event_git_1"],
   attribution: {
-    kind: "candidate_contributed",
+    kind: "change_window",
     confidence: "high",
-    basis: ["commit author matched candidate", "selected contribution window"]
+    basis: ["path changed in selected Git window", "person attribution was not evaluated"]
   },
   confidence: "high"
 });
 
 console.log(signal.attribution.kind);
 ```
+
+`parseLocalFeedbackPacket` validates a closed-field, local-preview feedback
+shape. It deliberately has no repository, path, commit, output, prompt, or
+free-text fields.
 
 ## Boundary
 

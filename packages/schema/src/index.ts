@@ -12,6 +12,7 @@ export type EvidenceSource =
   | "manual";
 
 export type AttributionKind =
+  | "change_window"
   | "candidate_contributed"
   | "pre_existing"
   | "agent_activity"
@@ -28,6 +29,9 @@ export type EvidenceTier =
   | "repeated"
   | "attested"
   | "outcome_linked";
+
+export const SCAN_SCHEMA_VERSION = "firstrung.scan.v1";
+export const FEEDBACK_PACKET_SCHEMA_VERSION = "firstrung.feedback.v1";
 
 export interface TimeWindow {
   startedAt?: string;
@@ -194,11 +198,39 @@ export interface ScanSummary {
   rawContentIncluded: boolean;
 }
 
+export interface ScanProvenance {
+  schemaVersion: string;
+  rulesetVersion: string;
+  templateVersion: string;
+  rendererVersion: string;
+}
+
 export interface ScanArtifact {
+  provenance: ScanProvenance;
   summary: ScanSummary;
   signals: EvidenceSignal[];
   rules: RuleResult[];
   episodes: SkillEpisode[];
+}
+
+export type FeedbackAccuracy = "accurate" | "partly_accurate" | "wrong";
+export type FeedbackReason = "too_wordy" | "generic" | "irrelevant" | "already_known" | "infeasible";
+export type FeedbackActionStatus = "acted" | "planned" | "ignored" | "not_applicable";
+export type FeedbackSurface = "terminal" | "markdown" | "coach";
+
+export interface LocalFeedbackPacket {
+  kind: "firstrung.feedback.preview.v1";
+  transport: "local_preview";
+  schemaVersion: string;
+  rulesetVersion: string;
+  templateVersion: string;
+  rendererVersion: string;
+  surface: FeedbackSurface;
+  accuracy: FeedbackAccuracy;
+  helpfulness: 1 | 2 | 3 | 4 | 5;
+  reasons: FeedbackReason[];
+  actionStatus: FeedbackActionStatus;
+  ruleIds: string[];
 }
 
 export class SchemaValidationError extends Error {
@@ -442,10 +474,58 @@ export function parseScanArtifact(input: unknown): ScanArtifact {
   const value = object(input, "ScanArtifact");
 
   return {
+    provenance: parseScanProvenance(value.provenance),
     summary: parseScanSummary(value.summary),
     signals: array(value.signals, "ScanArtifact.signals", parseEvidenceSignal),
     rules: array(value.rules, "ScanArtifact.rules", parseRuleResult),
     episodes: array(value.episodes, "ScanArtifact.episodes", parseSkillEpisode)
+  };
+}
+
+export function parseScanProvenance(input: unknown): ScanProvenance {
+  const value = object(input, "ScanProvenance");
+
+  return {
+    schemaVersion: string(value.schemaVersion, "ScanProvenance.schemaVersion"),
+    rulesetVersion: string(value.rulesetVersion, "ScanProvenance.rulesetVersion"),
+    templateVersion: string(value.templateVersion, "ScanProvenance.templateVersion"),
+    rendererVersion: string(value.rendererVersion, "ScanProvenance.rendererVersion")
+  };
+}
+
+export function parseLocalFeedbackPacket(input: unknown): LocalFeedbackPacket {
+  const value = object(input, "LocalFeedbackPacket");
+  const helpfulness = number(value.helpfulness, "LocalFeedbackPacket.helpfulness");
+
+  if (![1, 2, 3, 4, 5].includes(helpfulness)) {
+    throw new SchemaValidationError("LocalFeedbackPacket.helpfulness must be an integer from 1 to 5");
+  }
+
+  return {
+    kind: oneOf(value.kind, ["firstrung.feedback.preview.v1"] as const, "LocalFeedbackPacket.kind"),
+    transport: oneOf(value.transport, ["local_preview"] as const, "LocalFeedbackPacket.transport"),
+    schemaVersion: string(value.schemaVersion, "LocalFeedbackPacket.schemaVersion"),
+    rulesetVersion: string(value.rulesetVersion, "LocalFeedbackPacket.rulesetVersion"),
+    templateVersion: string(value.templateVersion, "LocalFeedbackPacket.templateVersion"),
+    rendererVersion: string(value.rendererVersion, "LocalFeedbackPacket.rendererVersion"),
+    surface: oneOf(value.surface, ["terminal", "markdown", "coach"] as const, "LocalFeedbackPacket.surface"),
+    accuracy: oneOf(
+      value.accuracy,
+      ["accurate", "partly_accurate", "wrong"] as const,
+      "LocalFeedbackPacket.accuracy"
+    ),
+    helpfulness: helpfulness as LocalFeedbackPacket["helpfulness"],
+    reasons: enumArray(
+      value.reasons,
+      ["too_wordy", "generic", "irrelevant", "already_known", "infeasible"] as const,
+      "LocalFeedbackPacket.reasons"
+    ),
+    actionStatus: oneOf(
+      value.actionStatus,
+      ["acted", "planned", "ignored", "not_applicable"] as const,
+      "LocalFeedbackPacket.actionStatus"
+    ),
+    ruleIds: stringArray(value.ruleIds, "LocalFeedbackPacket.ruleIds")
   };
 }
 
@@ -460,6 +540,7 @@ const evidenceSources = [
 ] as const;
 
 const attributionKinds = [
+  "change_window",
   "candidate_contributed",
   "pre_existing",
   "agent_activity",

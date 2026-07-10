@@ -6,17 +6,28 @@
     "packages/schema",
     "packages/collector",
     "packages/rules",
+    "packages/ai-session",
+    "packages/pi-coach",
     "packages/report",
     "packages/cli"
   ],
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
-    "check": "npm run build && npm test",
-    "release:schema": "npm publish --workspace @firstrung/schema --access public"
+    "test:docker": "bash scripts/docker-smoke.sh",
+    "test:docker:published": "bash scripts/docker-published-smoke.sh",
+    "test:release-safety": "node --test scripts/release-preflight.test.mjs scripts/release-alpha.test.mjs",
+    "eval:deterministic": "node --test test/eval/*.test.mjs && node test/eval/run-eval.mjs",
+    "check": "npm run build && npm test && npm run test:release-safety",
+    "check:ci": "npm run check && npm run eval:deterministic",
+    "check:deterministic-node-floor": "npm run test --workspace @firstrung/schema --workspace @firstrung/collector --workspace @firstrung/rules --workspace @firstrung/ai-session --workspace @firstrung/report --workspace firstrung",
+    "pack:dry-run": "npm pack --workspaces --dry-run",
+    "release:source-preflight": "node scripts/release-preflight.mjs",
+    "release:preflight": "node scripts/release-alpha.mjs --preflight-only",
+    "release:alpha": "node scripts/release-alpha.mjs"
   },
   "engines": {
-    "node": ">=22.6"
+    "node": ">=22.19.0"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

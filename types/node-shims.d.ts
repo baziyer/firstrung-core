@@ -7,6 +7,10 @@ declare const console: {
 
 declare const process: {
   argv: string[];
+  version: string;
+  versions: {
+    node: string;
+  };
   cwd(): string;
   exitCode?: number;
   stderr: {
@@ -20,6 +24,8 @@ declare const process: {
 declare module "node:child_process" {
   export interface ExecFileException extends Error {
     code?: number | string;
+    killed?: boolean;
+    signal?: string;
     stdout?: string;
     stderr?: string;
   }
@@ -31,12 +37,23 @@ declare module "node:child_process" {
       cwd?: string;
       encoding?: BufferEncoding;
       maxBuffer?: number;
+      timeout?: number;
     },
     callback: (error: ExecFileException | null, stdout: string, stderr: string) => void
   ): void;
 }
 
+declare module "node:crypto" {
+  export interface Hash {
+    update(data: string): Hash;
+    digest(encoding: "hex"): string;
+  }
+
+  export function createHash(algorithm: string): Hash;
+}
+
 declare module "node:fs/promises" {
+  export function appendFile(path: string, data: string, options?: BufferEncoding | { encoding?: BufferEncoding }): Promise<void>;
   export function mkdir(path: string, options?: { recursive?: boolean }): Promise<string | undefined>;
   export function realpath(path: string): Promise<string>;
   export function writeFile(path: string, data: string, options?: BufferEncoding | { encoding?: BufferEncoding }): Promise<void>;

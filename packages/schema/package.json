@@ -1,6 +1,6 @@
 {
   "name": "@firstrung/schema",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0-alpha.2",
   "description": "Public schema contract for FirstRung evidence, attribution, and rule results.",
   "type": "module",
   "license": "Apache-2.0",
@@ -14,12 +14,16 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test test/*.test.js",
     "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.6"
   },
   "repository": {
     "type": "git",

@@ -22,60 +22,88 @@ export interface RuleRunResult {
   skillEpisodes: SkillEpisode[];
 }
 
+export const ALPHA_RULESET_VERSION = "2026-07-10.1";
+export const ALPHA_TEMPLATE_VERSION = "2026-07-10.1";
+
+const riskChangeSignalTypes = [
+  "risk.file.added",
+  "risk.file.changed",
+  "risk.file.removed",
+  "risk.file.renamed",
+  "risk.file.copied"
+];
+const presentChangedTestSignalTypes = ["test.file.added", "test.file.changed", "test.file.copied"];
+const riskChangeSignalTypeSet = new Set(riskChangeSignalTypes);
+const presentChangedTestSignalTypeSet = new Set(presentChangedTestSignalTypes);
+
 export const alphaRuleDefinitions: RuleDefinition[] = [
   {
     id: "rule_risky_files_without_nearby_tests",
     name: "Risk-sensitive files changed without nearby tests",
-    version: "0.1.0-alpha.0",
-    description: "Finds candidate-contributed risk-sensitive file changes where no nearby test evidence was observed.",
-    appliesTo: ["risk.file.changed", "test.file.changed", "test.file.observed"],
-    requiredSignals: ["risk.file.changed"],
-    attributionRequired: ["candidate_contributed"],
+    version: ALPHA_RULESET_VERSION,
+    description: "Finds path-classified risk-sensitive changes where no conservatively related test path was observed.",
+    appliesTo: [...riskChangeSignalTypes, ...presentChangedTestSignalTypes, "test.file.observed"],
+    requiredSignals: riskChangeSignalTypes,
+    attributionRequired: ["change_window", "candidate_contributed"],
     evidenceTierImpact: ["observed"],
     feedbackTemplates: {
-      matched: "You changed risk-sensitive files, but I found no nearby test evidence yet.",
-      missingEvidence: "No evidence yet of tests near those risk-sensitive changes.",
-      nextStep: "Next useful step: add or surface a focused test near the risk-sensitive path."
+      matched: "A potentially risk-sensitive path has no conservatively matched nearby test path.",
+      missingEvidence: "Path metadata did not identify a closely related test path.",
+      nextStep: "Next: add or identify one focused test, then run it."
     }
   },
   {
     id: "rule_tests_near_risky_files",
-    name: "Tests added near risk-sensitive changes",
-    version: "0.1.0-alpha.0",
-    description: "Finds candidate-contributed test changes near candidate-contributed risk-sensitive paths.",
-    appliesTo: ["risk.file.changed", "test.file.changed"],
-    requiredSignals: ["risk.file.changed", "test.file.changed"],
-    attributionRequired: ["candidate_contributed"],
-    evidenceTierImpact: ["verified"],
+    name: "Changed tests near risk-sensitive changes",
+    version: ALPHA_RULESET_VERSION,
+    description: "Finds present test-path changes near path-classified risk-sensitive changes without claiming execution or authorship.",
+    appliesTo: [...riskChangeSignalTypes, ...presentChangedTestSignalTypes],
+    requiredSignals: [...riskChangeSignalTypes, ...presentChangedTestSignalTypes],
+    attributionRequired: ["change_window", "candidate_contributed"],
+    evidenceTierImpact: ["observed"],
     feedbackTemplates: {
-      matched: "You added tests near risk-sensitive changes.",
-      nextStep: "Next useful step: keep the test names and verification command easy to identify."
+      matched: "A changed test path was observed near a potentially risk-sensitive change.",
+      nextStep: "Next: run the relevant test and keep the command result."
+    }
+  },
+  {
+    id: "rule_existing_tests_near_risky_files",
+    name: "Existing tests near risk-sensitive changes",
+    version: ALPHA_RULESET_VERSION,
+    description: "Finds a conservatively related pre-existing test path for a path-classified risk-sensitive change.",
+    appliesTo: [...riskChangeSignalTypes, "test.file.observed"],
+    requiredSignals: [...riskChangeSignalTypes, "test.file.observed"],
+    attributionRequired: ["pre_existing"],
+    evidenceTierImpact: ["observed"],
+    feedbackTemplates: {
+      matched: "An existing test path was observed near a potentially risk-sensitive change.",
+      nextStep: "Next: run the relevant test and keep the command result."
     }
   },
   {
     id: "rule_deployment_config_evidence",
     name: "Deployment/config evidence observed",
-    version: "0.1.0-alpha.0",
+    version: ALPHA_RULESET_VERSION,
     description: "Finds deployment or configuration evidence and preserves contribution attribution.",
-    appliesTo: ["deployment.config.changed", "deployment.config.observed"],
-    requiredSignals: ["deployment.config.changed", "deployment.config.observed"],
+    appliesTo: ["deployment.config.added", "deployment.config.changed", "deployment.config.observed"],
+    requiredSignals: ["deployment.config.added", "deployment.config.changed", "deployment.config.observed"],
     evidenceTierImpact: ["observed"],
     feedbackTemplates: {
-      matched: "I found deployment/config evidence.",
-      nextStep: "Next useful step: connect this to a run, preview, or deployment receipt when you are ready."
+      matched: "Deployment/config path evidence was observed.",
+      nextStep: "Next: capture a preview or deployment check if this change will ship."
     }
   },
   {
     id: "rule_dependency_api_evidence",
     name: "Dependency/API integration evidence observed",
-    version: "0.1.0-alpha.0",
+    version: ALPHA_RULESET_VERSION,
     description: "Finds dependency/package evidence that may support integration work.",
-    appliesTo: ["dependency.file.changed", "dependency.file.observed"],
-    requiredSignals: ["dependency.file.changed", "dependency.file.observed"],
+    appliesTo: ["dependency.file.added", "dependency.file.changed", "dependency.file.observed"],
+    requiredSignals: ["dependency.file.added", "dependency.file.changed", "dependency.file.observed"],
     evidenceTierImpact: ["observed"],
     feedbackTemplates: {
-      matched: "I found dependency or API-integration evidence.",
-      nextStep: "Next useful step: pair dependency changes with tests or integration notes."
+      matched: "Dependency or package path evidence was observed.",
+      nextStep: "Next: run the closest build or integration check."
     }
   }
 ];
@@ -84,19 +112,31 @@ export function runAlphaRules(input: RunRulesInput): RuleRunResult {
   const projectId = input.projectId ?? input.signals[0]?.projectId ?? "project_unknown";
   const evaluatedAt = (input.now ?? new Date()).toISOString();
   const riskChanged = input.signals.filter(
-    (signal) => signal.signalType === "risk.file.changed" && signal.attribution.kind === "candidate_contributed"
+    (signal) =>
+      riskChangeSignalTypeSet.has(signal.signalType) &&
+      isChangeWindowSignal(signal) &&
+      hasTestableRiskCategory(signal)
   );
   const changedTests = input.signals.filter(
-    (signal) => signal.signalType === "test.file.changed" && signal.attribution.kind === "candidate_contributed"
+    (signal) =>
+      presentChangedTestSignalTypeSet.has(signal.signalType) &&
+      isChangeWindowSignal(signal)
   );
+  const observedTests = input.signals.filter((signal) => signal.signalType === "test.file.observed");
   const allTests = input.signals.filter(
-    (signal) => signal.signalType === "test.file.changed" || signal.signalType === "test.file.observed"
+    (signal) => presentChangedTestSignalTypeSet.has(signal.signalType) || signal.signalType === "test.file.observed"
   );
   const deploymentSignals = input.signals.filter(
-    (signal) => signal.signalType === "deployment.config.changed" || signal.signalType === "deployment.config.observed"
+    (signal) =>
+      signal.signalType === "deployment.config.added" ||
+      signal.signalType === "deployment.config.changed" ||
+      signal.signalType === "deployment.config.observed"
   );
   const dependencySignals = input.signals.filter(
-    (signal) => signal.signalType === "dependency.file.changed" || signal.signalType === "dependency.file.observed"
+    (signal) =>
+      signal.signalType === "dependency.file.added" ||
+      signal.signalType === "dependency.file.changed" ||
+      signal.signalType === "dependency.file.observed"
   );
 
   const riskyWithoutTests = riskChanged.filter(
@@ -104,6 +144,11 @@ export function runAlphaRules(input: RunRulesInput): RuleRunResult {
   );
   const riskyWithChangedTests = riskChanged.filter((riskSignal) =>
     changedTests.some((testSignal) => areNearby(pathOf(riskSignal), pathOf(testSignal)))
+  );
+  const riskyWithObservedTests = riskChanged.filter(
+    (riskSignal) =>
+      !changedTests.some((testSignal) => areNearby(pathOf(riskSignal), pathOf(testSignal))) &&
+      observedTests.some((testSignal) => areNearby(pathOf(riskSignal), pathOf(testSignal)))
   );
 
   const ruleResults: RuleResult[] = [];
@@ -115,13 +160,13 @@ export function runAlphaRules(input: RunRulesInput): RuleRunResult {
         projectId,
         evaluatedAt,
         matched: true,
-        confidence: "high",
+        confidence: "medium",
         matchedSignals: riskyWithoutTests,
         attribution: combineAttribution(riskyWithoutTests),
         evidenceTierImpact: ["observed"],
-        summary: "You changed risk-sensitive files, but I found no nearby test evidence yet.",
-        missingEvidence: ["No evidence yet of tests near those risk-sensitive changes."],
-        nextStep: "Next useful step: add or surface a focused test near the risk-sensitive path."
+        summary: "A potentially risk-sensitive path has no conservatively matched nearby test path.",
+        missingEvidence: ["Path metadata did not identify a closely related test path."],
+        nextStep: "Next: add or identify one focused test, then run it."
       })
     );
   }
@@ -139,9 +184,29 @@ export function runAlphaRules(input: RunRulesInput): RuleRunResult {
         confidence: "high",
         matchedSignals: [...riskyWithChangedTests, ...matchedTests],
         attribution: combineAttribution([...riskyWithChangedTests, ...matchedTests]),
-        evidenceTierImpact: ["verified"],
-        summary: "You added tests near risk-sensitive changes.",
-        nextStep: "Next useful step: keep the test names and verification command easy to identify."
+        evidenceTierImpact: ["observed"],
+        summary: "A changed test path was observed near a potentially risk-sensitive change.",
+        nextStep: "Next: run the relevant test and keep the command result."
+      })
+    );
+  }
+
+  if (riskyWithObservedTests.length > 0) {
+    const matchedTests = observedTests.filter((testSignal) =>
+      riskyWithObservedTests.some((riskSignal) => areNearby(pathOf(riskSignal), pathOf(testSignal)))
+    );
+    ruleResults.push(
+      buildRuleResult({
+        ruleId: "rule_existing_tests_near_risky_files",
+        projectId,
+        evaluatedAt,
+        matched: true,
+        confidence: "medium",
+        matchedSignals: [...riskyWithObservedTests, ...matchedTests],
+        attribution: combineAttribution(matchedTests),
+        evidenceTierImpact: ["observed"],
+        summary: "An existing test path was observed near a potentially risk-sensitive change.",
+        nextStep: "Next: run the relevant test and keep the command result."
       })
     );
   }
@@ -158,7 +223,9 @@ export function runAlphaRules(input: RunRulesInput): RuleRunResult {
         attribution: combineAttribution(deploymentSignals),
         evidenceTierImpact: ["observed"],
         summary: deploymentSummary(deploymentSignals),
-        nextStep: "Next useful step: connect this to a run, preview, or deployment receipt when you are ready."
+        nextStep: hasChangedCiWorkflow(deploymentSignals)
+          ? "Next: run or observe the relevant CI workflow."
+          : "Next: capture a preview or deployment check if this change will ship."
       })
     );
   }
@@ -175,7 +242,7 @@ export function runAlphaRules(input: RunRulesInput): RuleRunResult {
         attribution: combineAttribution(dependencySignals),
         evidenceTierImpact: ["observed"],
         summary: dependencySummary(dependencySignals),
-        nextStep: "Next useful step: pair dependency changes with tests or integration notes."
+        nextStep: "Next: run the closest build or integration check."
       })
     );
   }
@@ -226,7 +293,7 @@ function buildSkillEpisodes(projectId: string, ruleResults: RuleResult[]): Skill
       (result) =>
         result.matched &&
         result.ruleId !== "rule_risky_files_without_nearby_tests" &&
-        result.attribution.kind === "candidate_contributed"
+        (result.attribution.kind === "change_window" || result.attribution.kind === "candidate_contributed")
     )
     .map((result) => {
       const metadata = episodeMetadata(result);
@@ -276,29 +343,41 @@ function episodeMetadata(result: RuleResult): { type: string; title: string } {
 function deploymentSummary(signals: EvidenceSignal[]): string {
   const kinds = new Set(signals.map((signal) => signal.attribution.kind));
 
-  if (kinds.has("candidate_contributed")) {
-    return "I found deployment/config evidence you changed in this contribution window.";
+  if (hasChangedCiWorkflow(signals)) {
+    return "CI workflow metadata changed in the selected Git window; authorship and execution were not inferred.";
+  }
+
+  if (kinds.has("change_window") || kinds.has("candidate_contributed")) {
+    return "Deployment/config paths changed in the selected Git window; authorship was not inferred.";
   }
 
   if (kinds.has("pre_existing")) {
-    return "I found deployment/config evidence that appears to pre-date this contribution window.";
+    return "Deployment/config path evidence exists outside the selected Git window.";
   }
 
-  return "I found deployment/config evidence, but I could not tell whether you contributed it.";
+  return "Deployment/config path evidence was observed without a reliable change window.";
+}
+
+function hasChangedCiWorkflow(signals: EvidenceSignal[]): boolean {
+  return signals.some(
+    (signal) =>
+      (signal.signalType === "deployment.config.added" || signal.signalType === "deployment.config.changed") &&
+      pathOf(signal).replace(/\\/g, "/").toLowerCase().startsWith(".github/workflows/")
+  );
 }
 
 function dependencySummary(signals: EvidenceSignal[]): string {
   const kinds = new Set(signals.map((signal) => signal.attribution.kind));
 
-  if (kinds.has("candidate_contributed")) {
-    return "I found dependency or API-integration evidence you changed in this contribution window.";
+  if (kinds.has("change_window") || kinds.has("candidate_contributed")) {
+    return "Dependency or package paths changed in the selected Git window; authorship was not inferred.";
   }
 
   if (kinds.has("pre_existing")) {
-    return "I found dependency or API-integration evidence that appears to pre-date this contribution window.";
+    return "Dependency or package path evidence exists outside the selected Git window.";
   }
 
-  return "I found dependency or API-integration evidence, but I could not tell whether you contributed it.";
+  return "Dependency or package path evidence was observed without a reliable change window.";
 }
 
 function pathOf(signal: EvidenceSignal): string {
@@ -311,17 +390,10 @@ function areNearby(left: string, right: string): boolean {
     return false;
   }
 
-  const leftParts = normalizedParts(left);
-  const rightParts = normalizedParts(right);
-  const leftBase = baseWithoutTestTokens(leftParts[leftParts.length - 1] ?? "");
-  const rightBase = baseWithoutTestTokens(rightParts[rightParts.length - 1] ?? "");
-  const sharedDirectory = commonPrefix(leftParts.slice(0, -1), rightParts.slice(0, -1)).length;
+  const leftModule = normalizedModulePath(left);
+  const rightModule = normalizedModulePath(right);
 
-  return (
-    leftBase.length > 0 && rightBase.length > 0 && leftBase === rightBase ||
-    sharedDirectory >= Math.max(1, Math.min(leftParts.length, rightParts.length) - 2) ||
-    sharedPathToken(leftParts, rightParts)
-  );
+  return leftModule.length > 0 && leftModule === rightModule;
 }
 
 function normalizedParts(path: string): string[] {
@@ -336,27 +408,17 @@ function baseWithoutTestTokens(fileName: string): string {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-function commonPrefix(left: string[], right: string[]): string[] {
-  const result: string[] = [];
+function normalizedModulePath(path: string): string {
+  const ignoredDirectories = new Set(["src", "app", "lib", "server", "client", "test", "tests", "__tests__", "spec", "specs"]);
+  const parts = normalizedParts(path);
+  const fileName = parts.pop() ?? "";
+  const base = baseWithoutTestTokens(fileName);
 
-  for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
-    if (left[index] !== right[index]) {
-      break;
-    }
-
-    result.push(left[index] ?? "");
+  if (base.length === 0) {
+    return "";
   }
 
-  return result;
-}
-
-function sharedPathToken(left: string[], right: string[]): boolean {
-  const ignored = new Set(["src", "app", "lib", "server", "client", "test", "tests", "__tests__", "spec", "specs"]);
-  const leftTokens = new Set(left.flatMap((part) => part.split(/[^a-z0-9]+/)).filter((part) => part.length > 2 && !ignored.has(part)));
-
-  return right
-    .flatMap((part) => part.split(/[^a-z0-9]+/))
-    .some((part) => part.length > 2 && leftTokens.has(part));
+  return [...parts.filter((part) => !ignoredDirectories.has(part)), base].join("/");
 }
 
 function combineAttribution(signals: EvidenceSignal[]): ContributionAttribution {
@@ -367,8 +429,12 @@ function combineAttribution(signals: EvidenceSignal[]): ContributionAttribution 
     return attribution(kinds[0] ?? "unknown", basis, strongestConfidence(signals));
   }
 
+  if (kinds.includes("change_window")) {
+    return attribution("change_window", [...basis, "at least one matched signal changed in the selected Git window"], "medium");
+  }
+
   if (kinds.includes("candidate_contributed")) {
-    return attribution("candidate_contributed", [...basis, "at least one matched signal changed in the contribution window"], "medium");
+    return attribution("candidate_contributed", basis, "medium");
   }
 
   if (kinds.includes("pre_existing")) {
@@ -376,6 +442,17 @@ function combineAttribution(signals: EvidenceSignal[]): ContributionAttribution 
   }
 
   return attribution("unknown", basis.length > 0 ? basis : ["mixed or unavailable attribution"], "low");
+}
+
+function isChangeWindowSignal(signal: EvidenceSignal): boolean {
+  return signal.attribution.kind === "change_window" || signal.attribution.kind === "candidate_contributed";
+}
+
+function hasTestableRiskCategory(signal: EvidenceSignal): boolean {
+  const categories = signal.data?.riskCategories;
+  return Array.isArray(categories) && categories.some(
+    (category) => typeof category === "string" && category !== "infrastructure_deploy"
+  );
 }
 
 function strongestConfidence(signals: EvidenceSignal[]): Confidence {

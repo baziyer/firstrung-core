@@ -1,0 +1,53 @@
+{
+  "name": "@firstrung/pi-coach",
+  "version": "0.1.0-alpha.2",
+  "description": "Optional FirstRung Coach adapter powered by Pi.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "firstrung-coach": "dist/bin/firstrung-coach.js",
+    "firstrung-pi-coach": "dist/bin/firstrung-coach.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "scripts/probe-pi-lockdown.mjs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.js",
+    "probe:lockdown": "npm run build && node scripts/probe-pi-lockdown.mjs",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.3",
+    "@firstrung/ai-session": "0.1.0-alpha.2",
+    "@firstrung/collector": "0.1.0-alpha.2",
+    "@firstrung/rules": "0.1.0-alpha.2",
+    "@firstrung/schema": "0.1.0-alpha.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baziyer/firstrung-core.git",
+    "directory": "packages/pi-coach"
+  },
+  "bugs": {
+    "url": "https://github.com/baziyer/firstrung-core/issues"
+  },
+  "homepage": "https://github.com/baziyer/firstrung-core/tree/main/packages/pi-coach#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
